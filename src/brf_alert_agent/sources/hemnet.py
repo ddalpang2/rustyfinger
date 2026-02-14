@@ -15,7 +15,7 @@ from brf_alert_agent.models import ListingDetail, ListingSummary
 
 LOGGER = logging.getLogger(__name__)
 
-LISTING_PATH_RE = re.compile(r"/bostad/[^?#]+-(\d+)")
+LISTING_PATH_RE = re.compile(r"^/bostad/[^?#]+-(\d+)(?:/)?$")
 PRICE_RE = re.compile(r"\b\d[\d\s\u00A0]*\s*kr\b", re.IGNORECASE)
 
 
