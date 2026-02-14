@@ -1,0 +1,60 @@
+state_db_path: ".data/brf_alert_agent.db"
+
+sources:
+  - name: "hemnet-innerstad"
+    type: "hemnet"
+    # 아래 URL은 예시입니다. Hemnet에서 'Stockholm innerstad + bostadsrätt'
+    # 조건으로 검색 후 주소창 URL을 그대로 넣는 방식이 가장 정확합니다.
+    search_urls:
+      - "https://www.hemnet.se/bostader?item_types%5B%5D=bostadsratt&location_ids%5B%5D=18031"
+    max_listings_per_run: 60
+    request_timeout_seconds: 20
+
+matching:
+  require_brf_keyword: true
+  enforce_innerstad_keyword: true
+  brf_keywords:
+    - "bostadsrätt"
+    - "brf"
+    - "förening"
+  innerstad_keywords:
+    - "norrmalm"
+    - "östermalm"
+    - "södermalm"
+    - "kungsholmen"
+    - "vasastan"
+    - "gamla stan"
+    - "stockholm innerstad"
+  whole_unit_rental_keywords:
+    - "andrahandsuthyrning"
+    - "uthyrning i andra hand"
+    - "får hyras ut i andra hand"
+    - "tillåter andrahandsuthyrning"
+    - "godkänner andrahandsuthyrning"
+    - "möjlighet till andrahandsuthyrning"
+  separate_entrance_keywords:
+    - "separat ingång"
+    - "egen ingång"
+    - "egen entré"
+    - "uthyrningsdel"
+    - "delbar planlösning"
+
+notifications:
+  slack:
+    enabled: false
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+  email:
+    enabled: false
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    username: "${SMTP_USERNAME}"
+    password: "${SMTP_PASSWORD}"
+    from_email: "${ALERT_FROM_EMAIL}"
+    to_emails:
+      - "${ALERT_TO_EMAIL}"
+    use_tls: true
+
+run:
+  poll_interval_seconds: 900
+  request_spacing_seconds: 0.2
+

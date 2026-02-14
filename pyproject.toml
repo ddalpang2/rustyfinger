@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stockholm-brf-alert-agent"
+version = "0.1.0"
+description = "Alert agent for Stockholm BRF listings with rental-friendly conditions"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "beautifulsoup4>=4.13.0",
+  "PyYAML>=6.0.0",
+  "requests>=2.32.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+brf-alert-agent = "brf_alert_agent.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
