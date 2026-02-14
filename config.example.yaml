@@ -53,8 +53,18 @@ notifications:
     to_emails:
       - "${ALERT_TO_EMAIL}"
     use_tls: true
+  telegram:
+    enabled: true
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    chat_id: "${TELEGRAM_CHAT_ID}"
+    disable_web_page_preview: true
 
 run:
-  poll_interval_seconds: 900
+  # daemon 모드일 때 주기. 86400초 = 하루 1회
+  poll_interval_seconds: 86400
   request_spacing_seconds: 0.2
+  # run/daemon 모두 한 번 실행이 끝날 때 요약 리포트 전송
+  send_summary_after_run: true
+  summary_max_matches: 5
+  summary_max_errors: 5
 

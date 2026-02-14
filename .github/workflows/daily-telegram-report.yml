@@ -1,0 +1,49 @@
+name: Daily BRF Telegram Report
+
+on:
+  schedule:
+    - cron: "10 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restore agent state cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .data/brf_alert_agent.db
+          key: brf-alert-state-${{ github.run_id }}
+          restore-keys: |
+            brf-alert-state-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Run agent once
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          ALERT_FROM_EMAIL: ${{ secrets.ALERT_FROM_EMAIL }}
+          ALERT_TO_EMAIL: ${{ secrets.ALERT_TO_EMAIL }}
+        run: |
+          python -m brf_alert_agent --config config.example.yaml --log-level INFO run
+
+      - name: Save agent state cache
+        uses: actions/cache/save@v4
+        with:
+          path: .data/brf_alert_agent.db
+          key: brf-alert-state-${{ github.run_id }}

@@ -91,15 +91,27 @@ class EmailConfig:
 
 
 @dataclass(slots=True)
+class TelegramConfig:
+    enabled: bool = False
+    bot_token: str | None = None
+    chat_id: str | None = None
+    disable_web_page_preview: bool = True
+
+
+@dataclass(slots=True)
 class NotificationConfig:
     slack: SlackConfig = field(default_factory=SlackConfig)
     email: EmailConfig = field(default_factory=EmailConfig)
+    telegram: TelegramConfig = field(default_factory=TelegramConfig)
 
 
 @dataclass(slots=True)
 class RunConfig:
     poll_interval_seconds: int = 900
     request_spacing_seconds: float = 0.2
+    send_summary_after_run: bool = False
+    summary_max_matches: int = 5
+    summary_max_errors: int = 5
 
 
 @dataclass(slots=True)
@@ -133,8 +145,10 @@ def load_config(path: str | Path) -> AgentConfig:
 
     matching_raw = expanded.get("matching", {})
     matching = MatchingConfig(
-        require_brf_keyword=bool(matching_raw.get("require_brf_keyword", True)),
-        enforce_innerstad_keyword=bool(matching_raw.get("enforce_innerstad_keyword", True)),
+        require_brf_keyword=_as_bool(matching_raw.get("require_brf_keyword", True)),
+        enforce_innerstad_keyword=_as_bool(
+            matching_raw.get("enforce_innerstad_keyword", True)
+        ),
         brf_keywords=_as_string_list(
             matching_raw.get("brf_keywords", MatchingConfig().brf_keywords)
         ),
@@ -158,20 +172,29 @@ def load_config(path: str | Path) -> AgentConfig:
     notifications_raw = expanded.get("notifications", {})
     slack_raw = notifications_raw.get("slack", {})
     email_raw = notifications_raw.get("email", {})
+    telegram_raw = notifications_raw.get("telegram", {})
     notifications = NotificationConfig(
         slack=SlackConfig(
-            enabled=bool(slack_raw.get("enabled", False)),
+            enabled=_as_bool(slack_raw.get("enabled", False)),
             webhook_url=slack_raw.get("webhook_url"),
         ),
         email=EmailConfig(
-            enabled=bool(email_raw.get("enabled", False)),
+            enabled=_as_bool(email_raw.get("enabled", False)),
             smtp_host=email_raw.get("smtp_host", "smtp.gmail.com"),
             smtp_port=int(email_raw.get("smtp_port", 587)),
             username=email_raw.get("username"),
             password=email_raw.get("password"),
             from_email=email_raw.get("from_email"),
             to_emails=_as_string_list(email_raw.get("to_emails", [])),
-            use_tls=bool(email_raw.get("use_tls", True)),
+            use_tls=_as_bool(email_raw.get("use_tls", True)),
+        ),
+        telegram=TelegramConfig(
+            enabled=_as_bool(telegram_raw.get("enabled", False)),
+            bot_token=telegram_raw.get("bot_token"),
+            chat_id=str(telegram_raw.get("chat_id", "")).strip() or None,
+            disable_web_page_preview=_as_bool(
+                telegram_raw.get("disable_web_page_preview", True)
+            ),
         ),
     )
 
@@ -179,6 +202,9 @@ def load_config(path: str | Path) -> AgentConfig:
     run = RunConfig(
         poll_interval_seconds=int(run_raw.get("poll_interval_seconds", 900)),
         request_spacing_seconds=float(run_raw.get("request_spacing_seconds", 0.2)),
+        send_summary_after_run=_as_bool(run_raw.get("send_summary_after_run", False)),
+        summary_max_matches=int(run_raw.get("summary_max_matches", 5)),
+        summary_max_errors=int(run_raw.get("summary_max_errors", 5)),
     )
 
     return AgentConfig(
@@ -204,8 +230,28 @@ def _as_string_list(value: Any) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
-        return [value]
+        stripped = value.strip()
+        return [stripped] if stripped else []
     if not isinstance(value, list):
         raise TypeError(f"Expected list[str], got {type(value)}")
-    return [str(item) for item in value]
+    result: list[str] = []
+    for item in value:
+        text = str(item).strip()
+        if text:
+            result.append(text)
+    return result
+
+
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().casefold()
+        if lowered in {"1", "true", "yes", "y", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "n", "off", ""}:
+            return False
+    raise ValueError(f"Expected bool-like value, got {value!r}")
 

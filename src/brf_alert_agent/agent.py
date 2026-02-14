@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from brf_alert_agent.config import AgentConfig, SourceConfig
 from brf_alert_agent.matching import evaluate_listing
@@ -20,6 +20,8 @@ class RunStats:
     new_checked: int = 0
     matched: int = 0
     alerted: int = 0
+    matched_listing_urls: list[str] = field(default_factory=list)
+    source_errors: list[str] = field(default_factory=list)
 
 
 class BrfAlertAgent:
@@ -38,17 +40,39 @@ class BrfAlertAgent:
     def run_once(self) -> RunStats:
         stats = RunStats()
         for source in self._sources:
-            stats_for_source = self._run_source_once(source)
+            try:
+                stats_for_source = self._run_source_once(source)
+            except Exception as exc:
+                LOGGER.exception("[%s] source run failed.", source.name)
+                stats.source_errors.append(f"{source.name}: {exc}")
+                continue
             stats.discovered += stats_for_source.discovered
             stats.new_checked += stats_for_source.new_checked
             stats.matched += stats_for_source.matched
             stats.alerted += stats_for_source.alerted
+            stats.matched_listing_urls.extend(stats_for_source.matched_listing_urls)
+            stats.source_errors.extend(stats_for_source.source_errors)
+        if self._config.run.send_summary_after_run:
+            try:
+                self._notifier.send_run_summary(
+                    discovered=stats.discovered,
+                    new_checked=stats.new_checked,
+                    matched=stats.matched,
+                    alerted=stats.alerted,
+                    source_errors=stats.source_errors,
+                    matched_listing_urls=stats.matched_listing_urls,
+                    max_matches=self._config.run.summary_max_matches,
+                    max_errors=self._config.run.summary_max_errors,
+                )
+            except Exception:
+                LOGGER.exception("Failed to send run summary notification.")
         LOGGER.info(
-            "Run complete: discovered=%s new_checked=%s matched=%s alerted=%s",
+            "Run complete: discovered=%s new_checked=%s matched=%s alerted=%s source_errors=%s",
             stats.discovered,
             stats.new_checked,
             stats.matched,
             stats.alerted,
+            len(stats.source_errors),
         )
         return stats
 
@@ -93,6 +117,7 @@ class BrfAlertAgent:
             if sent:
                 source_stats.alerted += 1
             self._store.mark_alerted(detail, match)
+            source_stats.matched_listing_urls.append(detail.url)
             LOGGER.info(
                 "[%s] matched listing %s (alerted=%s)",
                 source.name,
