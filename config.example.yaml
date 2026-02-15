@@ -1,0 +1,75 @@
+state_db_path: ".data/brf_alert_agent.db"
+
+sources:
+  - name: "booli-innerstad"
+    type: "booli"
+    # 기본값은 booli를 사용합니다(클라우드 환경에서 hemnet는 403이 자주 발생).
+    search_urls:
+      - "https://www.booli.se/sok/till-salu?q=Stockholm%20Innerstad&objectType=L%C3%A4genhet"
+    max_listings_per_run: 60
+    # Booli 한 페이지에 보통 35개가 보이므로, 여러 페이지를 순회해야 더 많이 수집됩니다.
+    max_search_pages: 6
+    request_timeout_seconds: 20
+    # booli 상세의 "Läs mer hos mäklaren" 링크를 따라가 원문 설명을 추가 수집합니다.
+    follow_broker_listing_links: true
+    max_broker_links_per_listing: 1
+    broker_text_max_chars: 30000
+
+matching:
+  require_brf_keyword: true
+  enforce_innerstad_keyword: true
+  brf_keywords:
+    - "bostadsrätt"
+    - "brf"
+    - "förening"
+  innerstad_keywords:
+    - "norrmalm"
+    - "östermalm"
+    - "södermalm"
+    - "kungsholmen"
+    - "vasastan"
+    - "gamla stan"
+    - "stockholm innerstad"
+  whole_unit_rental_keywords:
+    - "andrahandsuthyrning"
+    - "uthyrning i andra hand"
+    - "får hyras ut i andra hand"
+    - "tillåter andrahandsuthyrning"
+    - "godkänner andrahandsuthyrning"
+    - "möjlighet till andrahandsuthyrning"
+  separate_entrance_keywords:
+    - "separat ingång"
+    - "egen ingång"
+    - "egen entré"
+    - "uthyrningsdel"
+    - "delbar planlösning"
+
+notifications:
+  slack:
+    enabled: false
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+  email:
+    enabled: false
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    username: "${SMTP_USERNAME}"
+    password: "${SMTP_PASSWORD}"
+    from_email: "${ALERT_FROM_EMAIL}"
+    to_emails:
+      - "${ALERT_TO_EMAIL}"
+    use_tls: true
+  telegram:
+    enabled: true
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    chat_id: "${TELEGRAM_CHAT_ID}"
+    disable_web_page_preview: true
+
+run:
+  # daemon 모드일 때 주기. 86400초 = 하루 1회
+  poll_interval_seconds: 86400
+  request_spacing_seconds: 0.2
+  # run/daemon 모두 한 번 실행이 끝날 때 요약 리포트 전송
+  send_summary_after_run: true
+  summary_max_matches: 5
+  summary_max_errors: 5
+
