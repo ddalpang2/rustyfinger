@@ -134,7 +134,7 @@ def load_config(path: str | Path) -> AgentConfig:
     sources = [
         SourceConfig(
             name=item["name"],
-            type=item.get("type", "hemnet"),
+            type=item.get("type", "booli"),
             search_urls=_as_string_list(item["search_urls"]),
             max_listings_per_run=int(item.get("max_listings_per_run", 80)),
             request_timeout_seconds=int(item.get("request_timeout_seconds", 20)),

@@ -8,6 +8,7 @@ from brf_alert_agent.config import AgentConfig, SourceConfig
 from brf_alert_agent.matching import evaluate_listing
 from brf_alert_agent.notify import NotificationDispatcher
 from brf_alert_agent.sources.base import ListingSource
+from brf_alert_agent.sources.booli import BooliSource
 from brf_alert_agent.sources.hemnet import HemnetSource
 from brf_alert_agent.store import StateStore
 
@@ -129,6 +130,11 @@ class BrfAlertAgent:
 
 def _build_source(source: SourceConfig, request_spacing_seconds: float) -> ListingSource:
     source_type = source.type.casefold()
+    if source_type == "booli":
+        return BooliSource(
+            source,
+            request_spacing_seconds=request_spacing_seconds,
+        )
     if source_type == "hemnet":
         return HemnetSource(
             source,

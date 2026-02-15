@@ -9,7 +9,8 @@
 
 ## 기능 요약
 
-- Hemnet 검색 결과 페이지 모니터링
+- Booli 검색 결과 페이지 모니터링 (기본)
+- Hemnet 소스도 지원하나, 클라우드 환경에서는 403 차단이 발생할 수 있음
 - 신규 매물만 상세 조회 (중복 방지: SQLite 상태 저장)
 - BRF/도심 키워드 + 임대 가능 키워드 규칙 매칭
 - Slack 웹훅 / SMTP 이메일 / Telegram Bot 알림 지원
@@ -34,7 +35,7 @@ cp config.example.yaml config.yaml
 
 `config.yaml`에서 확인할 항목:
 
-1. `sources[].search_urls`: Hemnet에서 직접 필터링한 검색 URL
+1. `sources[].search_urls`: Booli/Hemnet 검색 URL
 2. `matching.*keywords`: 임대 가능성 판정 키워드
 3. `notifications.slack`, `notifications.email`, `notifications.telegram`: 알림 채널
 4. `run.send_summary_after_run`: 매 실행 종료 시 요약 리포트 발송 여부
