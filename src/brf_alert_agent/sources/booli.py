@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import logging
 import re
 import time
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -10,8 +11,21 @@ from bs4 import BeautifulSoup
 from brf_alert_agent.config import SourceConfig
 from brf_alert_agent.models import ListingDetail, ListingSummary
 
+LOGGER = logging.getLogger(__name__)
 LISTING_PATH_RE = re.compile(r"^/(annons|bostad)/(\d+)(?:/)?$")
 PRICE_RE = re.compile(r"\b\d[\d\s\u00A0]*\s*kr\b", re.IGNORECASE)
+BROKER_BLOCKLIST_HOSTS = {
+    "apps.apple.com",
+    "facebook.com",
+    "hittamaklare.se",
+    "instagram.com",
+    "play.google.com",
+    "sbab.se",
+    "www.facebook.com",
+    "www.hittamaklare.se",
+    "www.instagram.com",
+    "www.sbab.se",
+}
 
 
 class BooliSource:
@@ -36,32 +50,80 @@ class BooliSource:
     def fetch_recent_listings(self) -> list[ListingSummary]:
         merged: list[ListingSummary] = []
         seen_ids: set[str] = set()
-        for idx, search_url in enumerate(self._config.search_urls):
-            html = self._get(search_url)
-            parsed = parse_search_results_html(
-                html=html,
-                source_name=self.name,
-                base_url=search_url,
-            )
-            for summary in parsed:
-                if summary.listing_id in seen_ids:
-                    continue
-                merged.append(summary)
-                seen_ids.add(summary.listing_id)
-                if len(merged) >= self._config.max_listings_per_run:
-                    return merged
-            if idx < len(self._config.search_urls) - 1:
+        max_pages = max(1, self._config.max_search_pages)
+        for source_idx, search_url in enumerate(self._config.search_urls):
+            for page in range(1, max_pages + 1):
+                paged_url = _with_page_param(search_url, page)
+                html = self._get(paged_url)
+                parsed = parse_search_results_html(
+                    html=html,
+                    source_name=self.name,
+                    base_url=paged_url,
+                )
+                if not parsed:
+                    break
+                newly_added_in_page = 0
+                for summary in parsed:
+                    if summary.listing_id in seen_ids:
+                        continue
+                    merged.append(summary)
+                    seen_ids.add(summary.listing_id)
+                    newly_added_in_page += 1
+                    if len(merged) >= self._config.max_listings_per_run:
+                        return merged
+                if newly_added_in_page == 0:
+                    break
+                if page < max_pages:
+                    time.sleep(self._request_spacing_seconds)
+            if source_idx < len(self._config.search_urls) - 1:
                 time.sleep(self._request_spacing_seconds)
         return merged
 
     def fetch_listing_detail(self, summary: ListingSummary) -> ListingDetail:
         html = self._get(summary.url)
-        return parse_listing_detail_html(summary=summary, html=html)
+        detail = parse_listing_detail_html(summary=summary, html=html)
+        if not self._config.follow_broker_listing_links:
+            return detail
+        broker_text = self._fetch_broker_text(detail_url=summary.url, detail_html=html)
+        if broker_text:
+            detail.body_text = f"{detail.body_text} {broker_text}".strip()
+        return detail
 
     def _get(self, url: str) -> str:
         response = self._session.get(url, timeout=self._config.request_timeout_seconds)
         response.raise_for_status()
         return response.text
+
+    def _fetch_broker_text(self, *, detail_url: str, detail_html: str) -> str:
+        broker_urls = extract_broker_listing_urls(
+            html=detail_html,
+            base_url=detail_url,
+            max_links=self._config.max_broker_links_per_listing,
+        )
+        if not broker_urls:
+            return ""
+        chunks: list[str] = []
+        for idx, broker_url in enumerate(broker_urls):
+            try:
+                broker_html = self._get(broker_url)
+            except Exception as exc:
+                LOGGER.warning(
+                    "[%s] failed to fetch broker listing page %s: %s",
+                    self.name,
+                    broker_url,
+                    exc,
+                )
+                continue
+            broker_text = extract_page_text_html(broker_html)
+            if not broker_text:
+                continue
+            chunks.append(
+                f"[broker_source:{broker_url}] "
+                f"{broker_text[: self._config.broker_text_max_chars]}"
+            )
+            if idx < len(broker_urls) - 1:
+                time.sleep(self._request_spacing_seconds)
+        return " ".join(chunks)
 
 
 def parse_search_results_html(
@@ -73,7 +135,10 @@ def parse_search_results_html(
     soup = BeautifulSoup(html, "html.parser")
     listings: list[ListingSummary] = []
     seen_ids: set[str] = set()
-    for anchor in soup.select("a[href]"):
+    anchors = soup.select("li.search-page__module-container a[href]")
+    if not anchors:
+        anchors = soup.select("a[href]")
+    for anchor in anchors:
         href = (anchor.get("href") or "").strip()
         if not href:
             continue
@@ -157,4 +222,67 @@ def _extract_listing_id(path: str) -> str | None:
     if not match:
         return None
     return f"{match.group(1)}-{match.group(2)}"
+
+
+def extract_broker_listing_urls(
+    *,
+    html: str,
+    base_url: str,
+    max_links: int,
+) -> list[str]:
+    if max_links <= 0:
+        return []
+    soup = BeautifulSoup(html, "html.parser")
+    urls: list[str] = []
+    seen_urls: set[str] = set()
+    for anchor in soup.select("a[href]"):
+        href = (anchor.get("href") or "").strip()
+        if not href:
+            continue
+        absolute_url = urljoin(base_url, href)
+        if absolute_url in seen_urls:
+            continue
+        parsed = urlparse(absolute_url)
+        host = (parsed.hostname or "").casefold()
+        if not host or host.endswith("booli.se"):
+            continue
+        text = " ".join(anchor.stripped_strings).casefold()
+        if host in BROKER_BLOCKLIST_HOSTS:
+            continue
+        if _is_probable_broker_listing_link(url=absolute_url, text=text):
+            urls.append(absolute_url)
+            seen_urls.add(absolute_url)
+        if len(urls) >= max_links:
+            break
+    return urls
+
+
+def extract_page_text_html(html: str) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "noscript"]):
+        tag.extract()
+    return " ".join(soup.stripped_strings)
+
+
+def _is_probable_broker_listing_link(*, url: str, text: str) -> bool:
+    if "läs mer hos mäklaren" in text:
+        return True
+    if "mäklaren" in text and "utropspris" in text:
+        return True
+    if "utm_source=booli" in url and "referral" in url and "till-salu" in url:
+        return True
+    return False
+
+
+def _with_page_param(search_url: str, page: int) -> str:
+    if page < 1:
+        raise ValueError("page must be >= 1")
+    parsed = urlparse(search_url)
+    params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    if page == 1:
+        params.pop("page", None)
+    else:
+        params["page"] = str(page)
+    updated = parsed._replace(query=urlencode(params, doseq=True))
+    return urlunparse(updated)
 

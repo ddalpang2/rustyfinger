@@ -2,6 +2,8 @@ from pathlib import Path
 
 from brf_alert_agent.models import ListingSummary
 from brf_alert_agent.sources.booli import (
+    _with_page_param,
+    extract_broker_listing_urls,
     parse_listing_detail_html,
     parse_search_results_html,
 )
@@ -36,4 +38,26 @@ def test_parse_listing_detail_html_extracts_title_address_and_price() -> None:
     assert "Testgatan 1" in detail.address
     assert detail.price == "5 995 000 kr"
     assert "andrahandsuthyrning" in detail.body_text
+
+
+def test_extract_broker_listing_urls_returns_external_broker_link() -> None:
+    html = (FIXTURE_DIR / "booli_listing_sample.html").read_text(encoding="utf-8")
+    urls = extract_broker_listing_urls(
+        html=html,
+        base_url="https://www.booli.se/annons/6010724",
+        max_links=2,
+    )
+    assert urls == [
+        "https://example-broker.se/objekt/123?utm_source=booli&utm_medium=referral&utm_campaign=till-salu"
+    ]
+
+
+def test_with_page_param_sets_and_removes_page_query() -> None:
+    base_url = "https://www.booli.se/sok/till-salu?objectType=L%C3%A4genhet&page=9"
+    assert _with_page_param(base_url, 1) == (
+        "https://www.booli.se/sok/till-salu?objectType=L%C3%A4genhet"
+    )
+    assert _with_page_param(base_url, 3) == (
+        "https://www.booli.se/sok/till-salu?objectType=L%C3%A4genhet&page=3"
+    )
 

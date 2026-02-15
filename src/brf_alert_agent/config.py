@@ -17,7 +17,11 @@ class SourceConfig:
     type: str
     search_urls: list[str]
     max_listings_per_run: int = 80
+    max_search_pages: int = 1
     request_timeout_seconds: int = 20
+    follow_broker_listing_links: bool = False
+    max_broker_links_per_listing: int = 1
+    broker_text_max_chars: int = 30000
     user_agent: str = (
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
@@ -137,7 +141,15 @@ def load_config(path: str | Path) -> AgentConfig:
             type=item.get("type", "booli"),
             search_urls=_as_string_list(item["search_urls"]),
             max_listings_per_run=int(item.get("max_listings_per_run", 80)),
+            max_search_pages=int(item.get("max_search_pages", 1)),
             request_timeout_seconds=int(item.get("request_timeout_seconds", 20)),
+            follow_broker_listing_links=_as_bool(
+                item.get("follow_broker_listing_links", False)
+            ),
+            max_broker_links_per_listing=int(
+                item.get("max_broker_links_per_listing", 1)
+            ),
+            broker_text_max_chars=int(item.get("broker_text_max_chars", 30000)),
             user_agent=item.get("user_agent", SourceConfig.__dataclass_fields__["user_agent"].default),  # type: ignore[index]
         )
         for item in sources_raw

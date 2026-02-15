@@ -7,7 +7,13 @@ sources:
     search_urls:
       - "https://www.booli.se/sok/till-salu?q=Stockholm%20Innerstad&objectType=L%C3%A4genhet"
     max_listings_per_run: 60
+    # Booli 한 페이지에 보통 35개가 보이므로, 여러 페이지를 순회해야 더 많이 수집됩니다.
+    max_search_pages: 6
     request_timeout_seconds: 20
+    # booli 상세의 "Läs mer hos mäklaren" 링크를 따라가 원문 설명을 추가 수집합니다.
+    follow_broker_listing_links: true
+    max_broker_links_per_listing: 1
+    broker_text_max_chars: 30000
 
 matching:
   require_brf_keyword: true

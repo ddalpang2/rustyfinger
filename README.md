@@ -12,6 +12,7 @@
 - Booli 검색 결과 페이지 모니터링 (기본)
 - Hemnet 소스도 지원하나, 클라우드 환경에서는 403 차단이 발생할 수 있음
 - 신규 매물만 상세 조회 (중복 방지: SQLite 상태 저장)
+- Booli 상세의 중개사 원문 링크(`Läs mer hos mäklaren`)까지 추적 가능
 - BRF/도심 키워드 + 임대 가능 키워드 규칙 매칭
 - Slack 웹훅 / SMTP 이메일 / Telegram Bot 알림 지원
 - 실행 1회마다 요약 리포트 전송 옵션(성공/실패/매치 개수)
@@ -36,6 +37,7 @@ cp config.example.yaml config.yaml
 `config.yaml`에서 확인할 항목:
 
 1. `sources[].search_urls`: Booli/Hemnet 검색 URL
+   - Booli는 페이지당 약 35개가 노출되므로 `sources[].max_search_pages`를 늘려야 더 많은 매물을 봅니다.
 2. `matching.*keywords`: 임대 가능성 판정 키워드
 3. `notifications.slack`, `notifications.email`, `notifications.telegram`: 알림 채널
 4. `run.send_summary_after_run`: 매 실행 종료 시 요약 리포트 발송 여부
